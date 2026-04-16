@@ -19,7 +19,8 @@ ALL_LEAGUES = HIGH_LEAGUES + [
     "soccer_europa_league", "soccer_afc_champions_league"
 ]
 
-DB_FILE = "v9_9_evolution_db.json"
+# 关键修复：用你原来的数据库文件名
+DB_FILE = "v8_evolution_db.json"
 
 # ====================== 基础工具 ======================
 def init_system_db():
