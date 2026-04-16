@@ -58,15 +58,27 @@ def save_db(rows):
         w.writeheader()
         w.writerows(rows)
 
-def fetch_match_result(home, away):
+def fetch_match_result(home, away, match_time_str):
+    """从免费API抓取已结束比赛的赛果，避免抓取错误的历史比赛"""
     try:
+        # 解析比赛时间
+        match_time = datetime.strptime(match_time_str, "%Y-%m-%d %H:%M")
+        now = datetime.now()
+        
+        # 比赛还没开始/正在进行，不抓取赛果
+        if match_time >= now:
+            return None
+            
+        # 先获取球队ID
         res = requests.get(f"{API_URL}searchteams.php?t={home}").json()
         if not res.get("teams"):
             return None
         team_id = res["teams"][0]["idTeam"]
+        # 获取球队近期比赛
         events = requests.get(f"{API_URL}eventslast.php?id={team_id}").json()
         for ev in events.get("events", []):
-            if ev.get("strHomeTeam") == home and ev.get("strAwayTeam") == away:
+            if (ev.get("strHomeTeam") == home 
+                and ev.get("strAwayTeam") == away):
                 hg = ev.get("intHomeScore")
                 ag = ev.get("intAwayScore")
                 if hg is not None and ag is not None:
@@ -121,7 +133,7 @@ def analyze(match):
     league_draw = league_draw_rate.get(league, league_draw_rate["默认"])
     if dp >= league_draw + 3:
         pattern = "平局倾向盘"
-        human_analysis = "📊 历史盘路匹配：该联赛平局打出率约为{}%，本场平局赔率下的隐含概率({}%)显著高于联赛平均水平，平局打出概率偏高".format(league_draw, dp)
+        human_analysis = f"📊 历史盘路匹配：该联赛平局打出率约为{league_draw}%，本场平局赔率下的隐含概率({dp}%)显著高于联赛平均水平，平局打出概率偏高"
         risk_level = "中"
 
     # 3. 推荐逻辑（人性盘修正后）
@@ -160,16 +172,16 @@ def main():
         report, suggestion, risk_level = analyze(m)
         full_report += report
 
-        # 自动复盘
+        # 只对已结束的比赛进行自动复盘
         if not m.get("final_result"):
-            res = fetch_match_result(m["home"], m["away"])
+            res = fetch_match_result(m["home"], m["away"], m["match_time"])
             if res:
                 m["final_result"] = res
                 m["hit_status"] = "命中" if suggestion == res else "未命中"
                 m["review"] = "自动复盘完成"
-                m["pattern_type"] = report.split("盘口形态：")[1].split("\n")[0]
-                m["human_analysis"] = report.split("人性盘分析：")[1].split("\n")[0]
-                m["draw_prob"] = report.split("平")[1].split("%")[0]
+                m["pattern_type"] = pattern
+                m["human_analysis"] = human_analysis
+                m["draw_prob"] = dp
                 updated = True
                 full_report += f"【赛果更新】实际结果：{res} | 本次预测：{m['hit_status']}\n"
 
@@ -179,7 +191,7 @@ def main():
         save_db(matches)
 
     send_email(full_report)
-    print("✅ V8.0终极版分析+复盘完成")
+    print("✅ V8.0终极版（时间校验修复）分析+复盘完成")
 
 if __name__ == "__main__":
     main()
