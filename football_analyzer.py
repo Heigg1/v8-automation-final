@@ -19,18 +19,19 @@ ALL_LEAGUES = HIGH_LEAGUES + [
     "soccer_europa_league", "soccer_afc_champions_league"
 ]
 
-# 关键修复：用你原来的数据库文件名
-DB_FILE = "v8_evolution_db.json"
+# 数据库文件（用新的文件名，避免和旧文件冲突）
+DB_FILE = "v99_evolution_db.json"
 
-# ====================== 基础工具 ======================
+# ====================== 基础工具（修复版） ======================
 def init_system_db():
     if not os.path.exists(DB_FILE):
         base = {"total":0, "correct":0, "draw_correct":0, "matches":[], "sent_live":{}}
         with open(DB_FILE, "w", encoding="utf-8") as f:
             json.dump(base, f, ensure_ascii=False, indent=2)
-    return load_system_db()
 
 def load_system_db():
+    # 找不到文件时，先创建再加载
+    init_system_db()
     with open(DB_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -228,7 +229,7 @@ def fetch_today_matches():
 
 # ====================== 定时任务 ======================
 def send_daily_schedule():
-    db = init_system_db()
+    db = load_system_db()
     matches = fetch_today_matches()
     html = "<h2>📅 V9.9 今日赛程（终极版）</h2><table border='1' cellpadding='4'>"
     html += "<tr><th>赛事</th><th>对阵</th><th>时间</th><th>单关</th><th>推荐</th><th>平局%</th><th>仓位</th></tr>"
@@ -239,7 +240,7 @@ def send_daily_schedule():
     send_email_report("V9.9 今日赛程", html)
 
 def send_live_picks():
-    db = init_system_db()
+    db = load_system_db()
     matches = fetch_today_matches()
     valid = [m for m in matches if m["result"] != "规避" and m["kelly"] > 0]
     if not valid:
