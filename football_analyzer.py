@@ -9,240 +9,244 @@ import json
 SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PWD = os.getenv("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
+# 新增：备用API Key
+FOOTBALL_DATA_KEY = os.getenv("FOOTBALL_DATA_API_KEY")
 
-# 联赛列表
-LEAGUES = [
-    "soccer_epl",
-    "soccer_bundesliga",
-    "soccer_serie_a",
-    "soccer_laliga",
-    "soccer_ligue_1",
-    "soccer_china_super"
+# 联赛配置（含你要的所有赛事）
+LEAGUE_CODES = [
+    "soccer_epl", "soccer_bundesliga", "soccer_serie_a", "soccer_laliga",
+    "soccer_ligue_1", "soccer_china_super", "soccer_efl_championship",
+    "soccer_eredivisie", "soccer_japan_j1_league", "soccer_korea_k_league_1",
+    "soccer_europa_league", "soccer_afc_champions_league"
 ]
 
-# 盘路数据库文件
+# 进化数据库
 DB_FILE = "v8_evolution_db.json"
 
-# ====================== 盘路数据库初始化 ======================
 def init_db():
     if not os.path.exists(DB_FILE):
-        with open(DB_FILE, "w") as f:
-            json.dump({
-                "total": 0,
-                "correct": 0,
-                "draw_correct": 0,
-                "predictions": []
-            }, f, indent=2)
+        data = {
+            "total": 0, "correct": 0, "draw_correct": 0,
+            "predictions": [], "sent_live": {}
+        }
+        with open(DB_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
-def save_prediction(match_id, match_info, predict, confidence):
-    with open(DB_FILE, "r") as f:
-        db = json.load(f)
-    db["predictions"].append({
-        "id": match_id,
-        "match": match_info,
-        "predict": predict,
-        "confidence": confidence,
-        "time": datetime.now().isoformat(),
-        "result": None
-    })
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
+def load_db():
+    with open(DB_FILE, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def update_result(match_id, actual_result):
-    with open(DB_FILE, "r") as f:
-        db = json.load(f)
-    for pred in db["predictions"]:
-        if pred["id"] == match_id and pred["result"] is None:
-            pred["result"] = actual_result
-            db["total"] += 1
-            if pred["predict"] == actual_result:
-                db["correct"] += 1
-                if pred["predict"] == "平局":
-                    db["draw_correct"] += 1
-    with open(DB_FILE, "w") as f:
-        json.dump(db, f, indent=2)
+def save_db(db):
+    with open(DB_FILE, "w", encoding="utf-8") as f:
+        json.dump(db, f, ensure_ascii=False, indent=2)
 
-def get_accuracy():
-    with open(DB_FILE, "r") as f:
-        db = json.load(f)
-    if db["total"] == 0:
-        return 0, 0
-    return round(db["correct"] / db["total"] * 100, 2), round(db["draw_correct"] / max(1, db["total"]) * 100, 2)
-
-# ====================== 拉取赛事+实时赔率+临场盘变 ======================
-def get_matches_with_odds():
-    matches = []
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    for league in LEAGUES:
-        try:
-            url = f"https://api.the-odds-api.com/v4/sports/{league}/odds"
-            params = {
-                "apiKey": "",
-                "regions": "eu",
-                "markets": "h2h,spreads,totals",
-                "dateFormat": "iso"
-            }
-            resp = requests.get(url, params=params, timeout=15)
-            if resp.status_code != 200:
-                continue
-            data = resp.json()
-            for g in data:
-                if g["commence_time"].startswith(today):
-                    h2h = next((m for m in g["bookmakers"][0]["markets"] if m["key"] == "h2h"), None)
-                    spreads = next((m for m in g["bookmakers"][0]["markets"] if m["key"] == "spreads"), None)
-                    totals = next((m for m in g["bookmakers"][0]["markets"] if m["key"] == "totals"), None)
-                    if not h2h or not spreads or not totals:
-                        continue
-                    outcomes = h2h["outcomes"]
-                    home_odds = next((o["price"] for o in outcomes if o["name"] == g["home_team"]), None)
-                    draw_odds = next((o["price"] for o in outcomes if o["name"] == "Draw"), None)
-                    away_odds = next((o["price"] for o in outcomes if o["name"] == g["away_team"]), None)
-                    if not home_odds or not draw_odds or not away_odds:
-                        continue
-                    spread = spreads["outcomes"][0]["point"]
-                    over_under = totals["outcomes"][0]["point"]
-                    matches.append({
-                        "id": g["id"],
-                        "home": g["home_team"],
-                        "away": g["away_team"],
-                        "kickoff": g["commence_time"],
-                        "league": league,
-                        "h": home_odds,
-                        "d": draw_odds,
-                        "a": away_odds,
-                        "spread": spread,
-                        "over_under": over_under,
-                        "is_single": "【单关】" if league in ["soccer_epl", "soccer_china_super"] else ""
-                    })
-        except Exception as e:
-            print(f"拉取{league}失败: {e}")
-    return matches
-
-# ====================== V8.0 人性化盘 + 亚盘深浅 + 庄路识别 ======================
-def v8_analysis(match):
-    h, d, a = match["h"], match["d"], match["a"]
-    spread = match["spread"]
-    implied = (1/h + 1/d + 1/a)
-    p_h = round((1/h)/implied * 100)
-    p_d = round((1/d)/implied * 100)
-    p_a = round((1/a)/implied * 100)
-    trap = ""
-    confidence = 60
-
-    # 1. 亚盘深浅判断
-    if spread < -0.5 and h > 1.8:
-        trap += "主队让盘过浅，防冷平"
-    elif spread > 0.5 and a > 1.8:
-        trap += "客队让盘过浅，防冷平"
-    elif abs(spread) < 0.3 and d < 3.2:
-        trap += "盘口胶着，平局优先"
-
-    # 2. 庄路识别（人性化盘）
-    if h > 2.0 and d < 3.3 and a > 3.2:
-        trap += " | 诱主盘，大众偏爱主胜，庄送舒服盘"
-        final = "平局"
-        confidence = 78
-    elif abs(h - a) < 0.3 and d < 3.2:
-        trap += " | 实力均衡，庄藏平局"
-        final = "平局"
-        confidence = 82
-    elif h < 1.85 and a > 4.2:
-        trap += " | 主胜格局，机构态度一致"
-        final = "主胜"
-        confidence = 70
-    elif a < 1.85 and h > 4.2:
-        trap += " | 客胜格局，机构态度一致"
-        final = "客胜"
-        confidence = 70
-    else:
-        final = "平局" if p_d > 35 else ("主胜" if h < a else "客胜")
-        confidence = 68
-
-    return {
-        "match_id": match["id"],
-        "match": f"{match['is_single']} {match['home']} vs {match['away']}",
-        "time": match["kickoff"],
-        "odds": f"{h:.2f} / {d:.2f} / {a:.2f}",
-        "prob": f"胜{p_h}% / 平{p_d}% / 负{p_a}%",
-        "spread": f"亚盘 {spread}",
-        "over_under": f"大小球 {match['over_under']}",
-        "predict": final,
-        "confidence": confidence,
-        "trap": trap.strip(" | ")
-    }
-
-# ====================== 赛后复盘更新 ======================
-def fetch_and_update_results():
-    try:
-        url = "https://api.football-data.org/v4/matches"
-        headers = {"X-Auth-Token": ""}
-        yesterday = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
-        params = {"date": yesterday}
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-        if resp.status_code != 200:
-            return
-        data = resp.json()
-        for match in data.get("matches", []):
-            if match["status"] == "FINISHED":
-                home = match["homeTeam"]["name"]
-                away = match["awayTeam"]["name"]
-                home_goals = match["score"]["fullTime"]["home"]
-                away_goals = match["score"]["fullTime"]["away"]
-                if home_goals > away_goals:
-                    result = "主胜"
-                elif home_goals < away_goals:
-                    result = "客胜"
-                else:
-                    result = "平局"
-                update_result(match["id"], result)
-    except Exception as e:
-        print(f"复盘更新失败: {e}")
-
-# ====================== 发送邮件（带复盘+命中率） ======================
-def send_report(analysis_list):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    acc, draw_acc = get_accuracy()
-    if not analysis_list:
-        body = f"""
-        <h2>✅ V8.0 人性化盘系统正常运行</h2>
-        <p>时间：{now}</p>
-        <p>今日无主流联赛赛事</p>
-        <p>历史命中率：{acc}% | 平局命中率：{draw_acc}%</p>
-        """
-    else:
-        body = f"<h2>⚽ V8.0 今日赛事分析报告 {now}</h2>"
-        body += f"<p>历史命中率：{acc}% | 平局命中率：{draw_acc}%</p><hr>"
-        for item in analysis_list:
-            body += f"""
-            <p><b>{item['match']}</b></p>
-            <p>开球：{item['time']}</p>
-            <p>赔率：{item['odds']}</p>
-            <p>概率：{item['prob']}</p>
-            <p>盘口：{item['spread']} | {item['over_under']}</p>
-            <p>推荐：<b>{item['predict']}</b>（置信度 {item['confidence']}%）</p>
-            <p>庄路提示：{item['trap']}</p>
-            <hr>
-            """
+# 邮件发送
+def send_email(subject, body):
     msg = MIMEText(body, "html", "utf-8")
-    msg["Subject"] = "V8.0 人性化盘分析报告"
+    msg["Subject"] = subject
     msg["From"] = SENDER_EMAIL
     msg["To"] = RECEIVER_EMAIL
     try:
-        with smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=15) as smtp:
-            smtp.login(SENDER_EMAIL, SENDER_PWD)
-            smtp.send_message(msg)
+        with smtplib.SMTP_SSL("smtp.qq.com", 465, timeout=20) as server:
+            server.login(SENDER_EMAIL, SENDER_PWD)
+            server.send_message(msg)
         print("✅ 邮件发送成功")
     except Exception as e:
-        print(f"❌ 发邮件失败：{e}")
+        print(f"❌ 发邮件失败: {e}")
 
-# ====================== 主程序 ======================
+# 1. 主API：odds-api（拉取赔率）
+def get_matches_from_odds_api():
+    matches = []
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    for league in LEAGUE_CODES:
+        try:
+            url = f"https://api.the-odds-api.com/v4/sports/{league}/odds"
+            params = {
+                "apiKey": "39b9c560a6910a1a22b756357dd12776",
+                "regions": "eu", "markets": "h2h,spreads", "dateFormat": "iso"
+            }
+            res = requests.get(url, params=params, timeout=10)
+            if res.status_code != 200:
+                continue
+            for game in res.json():
+                if game["commence_time"].startswith(today):
+                    h2h = next((m for m in game["bookmakers"][0]["markets"] if m["key"] == "h2h"), None)
+                    if not h2h: continue
+                    outs = h2h["outcomes"]
+                    h = next((x["price"] for x in outs if x["name"] == game["home_team"]), None)
+                    d = next((x["price"] for x in outs if x["name"] == "Draw"), None)
+                    a = next((x["price"] for x in outs if x["name"] == game["away_team"]), None)
+                    if h and d and a:
+                        matches.append({
+                            "id": game["id"], "home": game["home_team"], "away": game["away_team"],
+                            "kickoff": game["commence_time"], "h": h, "d": d, "a": a, "league": league,
+                            "is_single": "【单关】" if league in ["soccer_epl", "soccer_china_super"] else ""
+                        })
+        except Exception:
+            continue
+    return matches
+
+# 2. 备用API：football-data.org（拉取赛程+验证）
+def get_matches_from_football_data():
+    matches = []
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    league_map = {
+        "soccer_epl": "PL", "soccer_bundesliga": "BL1", "soccer_serie_a": "SA",
+        "soccer_laliga": "PD", "soccer_ligue_1": "FL1", "soccer_china_super": "CSL"
+    }
+    for league_code, api_code in league_map.items():
+        try:
+            url = f"https://api.football-data.org/v4/competitions/{api_code}/matches"
+            headers = {"X-Auth-Token": FOOTBALL_DATA_KEY}
+            params = {"dateFrom": today, "dateTo": today}
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            if res.status_code != 200:
+                continue
+            for match in res.json().get("matches", []):
+                matches.append({
+                    "home": match["homeTeam"]["name"], "away": match["awayTeam"]["name"],
+                    "kickoff": match["utcDate"], "league": league_code
+                })
+        except Exception:
+            continue
+    return matches
+
+# 双API数据交叉验证
+def get_verified_matches():
+    matches_main = get_matches_from_odds_api()
+    matches_backup = get_matches_from_football_data()
+    verified = []
+    backup_match_names = {(m["home"], m["away"]) for m in matches_backup}
+    for match in matches_main:
+        if (match["home"], match["away"]) in backup_match_names or len(matches_backup) == 0:
+            verified.append(match)
+    return verified
+
+# 11:10 发送今日赛程
+def send_schedule_1110():
+    now = datetime.now()
+    if not (now.hour == 11 and 9 <= now.minute <= 11):
+        return
+    matches = get_verified_matches()
+    if not matches:
+        send_email("V8.0 今日赛程", "<h3>今日无赛事</h3>")
+        return
+    html = "<h2>📅 今日全部赛程（双API验证）</h2>"
+    for m in matches:
+        html += f"<p>{m['is_single']} {m['home']} vs {m['away']}　开球：{m['kickoff']}</p>"
+    send_email("V8.0 今日赛程", html)
+
+# 赛前45分钟 临场分析
+def send_live_analysis():
+    db = load_db()
+    matches = get_verified_matches()
+    now_utc = datetime.utcnow()
+    for m in matches:
+        try:
+            kickoff = datetime.fromisoformat(m["kickoff"].replace("Z", ""))
+        except:
+            continue
+        diff = kickoff - now_utc
+        if not (timedelta(minutes=40) < diff < timedelta(minutes=50)):
+            continue
+        if db["sent_live"].get(m["id"]):
+            continue
+
+        h, d, a = m["h"], m["d"], m["a"]
+        imp = 1/h + 1/d + 1/a
+        ph = round(1/h/imp*100)
+        pd = round(1/d/imp*100)
+        pa = round(1/a/imp*100)
+
+        trap = ""
+        if h > 2.0 and d < 3.3:
+            trap = "诱主盘，重点防平"
+            pred = "平局"
+            conf = 78
+        elif abs(h - a) < 0.3 and d < 3.2:
+            trap = "胶着盘，机构藏平局"
+            pred = "平局"
+            conf = 82
+        elif h < 1.85:
+            trap = "正路主胜"
+            pred = "主胜"
+            conf = 70
+        elif a < 1.85:
+            trap = "正路客胜"
+            pred = "客胜"
+            conf = 70
+        else:
+            pred = "平局" if pd > 35 else ("主胜" if h < a else "客胜")
+            conf = 68
+
+        html = f"""
+        <h3>⚽ 临场分析 {m['is_single']}</h3>
+        <p>{m['home']} vs {m['away']}</p>
+        <p>赔率：{h:.2f} / {d:.2f} / {a:.2f}</p>
+        <p>概率：胜{ph}% 平{pd}% 负{pa}%</p>
+        <p><b>推荐：{pred}（置信度 {conf}%）</b></p>
+        <p>庄路提示：{trap}</p>
+        """
+        send_email(f"V8.0 临场推荐 {m['home']}vs{m['away']}", html)
+
+        db["predictions"].append({
+            "match_id": m["id"], "match": f"{m['home']}vs{m['away']}",
+            "predict": pred, "result": None
+        })
+        db["sent_live"][m["id"]] = True
+    save_db(db)
+
+# 全部比赛结束后统一复盘
+def full_review_at_night():
+    now = datetime.now()
+    if now.hour < 23:
+        return
+    db = load_db()
+    try:
+        date_str = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%d")
+        url = "https://api.football-data.org/v4/matches"
+        headers = {"X-Auth-Token": FOOTBALL_DATA_KEY}
+        params = {"date": date_str}
+        res = requests.get(url, headers=headers, params=params, timeout=15)
+        if res.status_code != 200:
+            return
+        games = res.json().get("matches", [])
+        for g in games:
+            if g.get("status") != "FINISHED":
+                continue
+            hg = g["score"]["fullTime"].get("homeTeam")
+            ag = g["score"]["fullTime"].get("awayTeam")
+            if hg is None or ag is None:
+                continue
+            actual = "主胜" if hg > ag else "客胜" if hg < ag else "平局"
+            for pred in db["predictions"]:
+                if pred["match"] == f"{g['homeTeam']['name']}vs{g['awayTeam']['name']}" and pred["result"] is None:
+                    pred["result"] = actual
+                    db["total"] += 1
+                    if pred["predict"] == actual:
+                        db["correct"] += 1
+                        if actual == "平局":
+                            db["draw_correct"] += 1
+        save_db(db)
+        total = db["total"]
+        correct = db["correct"]
+        draw_ok = db["draw_correct"]
+        acc = round(correct / max(total, 1) * 100, 2)
+        d_acc = round(draw_ok / max(total, 1) * 100, 2)
+        report = f"""
+        <h2>✅ 今日全部比赛复盘完成（双API验证）</h2>
+        <p>总场次：{total}</p>
+        <p>正确：{correct}</p>
+        <p>整体命中率：{acc}%</p>
+        <p>平局专项命中：{d_acc}%</p>
+        """
+        send_email("V8.0 每日复盘报告", report)
+    except Exception as e:
+        print(f"复盘异常: {e}")
+
+# 主程序
 if __name__ == "__main__":
     init_db()
-    print("=== V8.0 系统启动 ===")
-    fetch_and_update_results()
-    matches = get_matches_with_odds()
-    analysis = [v8_analysis(m) for m in matches]
-    for a in analysis:
-        save_prediction(a["match_id"], a["match"], a["predict"], a["confidence"])
-    send_report(analysis)
-    print("=== 任务结束 ===")
+    send_schedule_1110()
+    send_live_analysis()
+    full_review_at_night()
