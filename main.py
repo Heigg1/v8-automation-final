@@ -12,6 +12,17 @@ RECEIVER_EMAIL = "150102030@qq.com"
 DB_FILE = "v8_database.csv"
 API_URL = "https://www.thesportsdb.com/api/v1/json/3/"
 
+# 历史盘路平局率（简化版）
+league_draw_rate = {
+    "欧罗巴": 28.5,
+    "英超": 25.2,
+    "西甲": 24.8,
+    "意甲": 26.1,
+    "德甲": 23.5,
+    "法甲": 27.3,
+    "默认": 25.0
+}
+
 def send_email(content):
     msg = MIMEText(content, 'plain', 'utf-8')
     msg['From'] = Header("V8.0自进化破庄神器", 'utf-8')
@@ -75,9 +86,12 @@ def analyze(match):
         draw = float(match["jc_draw"])
         lose = float(match["jc_lose"])
     except:
-        return "【数据错误】", "未知"
+        return "【数据错误】", "未知", "低"
 
     is_single = match.get("is_single", "否")
+    league = match.get("league", "默认")
+
+    # 1. 基础概率计算
     wp = 1/win
     dp = 1/draw
     lp = 1/lose
@@ -86,42 +100,64 @@ def analyze(match):
     dp = round(dp/total*100,1)
     lp = round(lp/total*100,1)
 
+    # 2. 人性化盘识别（核心强化）
     pattern = "自然盘"
+    human_analysis = "无明显人性诱盘痕迹"
+    risk_level = "低"
+
+    # 热门诱盘修正
     if win < 1.6:
         pattern = "热门诱盘"
-    if is_single == "是":
-        pattern += "(单关风控)"
+        dp += 5.0  # 热门低赔盘，平局概率+5%
+        human_analysis = "⚠️ 热门低赔诱盘：主胜赔率过低，易吸引散户无脑投注，庄家控盘风险高，平局概率显著提升"
+        risk_level = "高"
+        if is_single == "是":
+            pattern += "(单关风控)"
+            dp += 3.0  # 单关热门盘，平局概率再+3%
+            human_analysis = "🚨 单关热门诱盘：单关赛事投注量大，庄家有极强动机做局，平局是平衡投注量的最优结果，需重点防平"
+            risk_level = "极高"
 
+    # 历史盘路匹配
+    league_draw = league_draw_rate.get(league, league_draw_rate["默认"])
+    if dp >= league_draw + 3:
+        pattern = "平局倾向盘"
+        human_analysis = "📊 历史盘路匹配：该联赛平局打出率约为{}%，本场平局赔率下的隐含概率({}%)显著高于联赛平均水平，平局打出概率偏高".format(league_draw, dp)
+        risk_level = "中"
+
+    # 3. 推荐逻辑（人性盘修正后）
     if dp >= 30:
         suggestion = "平"
-    elif win < 1.8:
+    elif win < 1.8 and risk_level != "极高":
         suggestion = "胜"
     else:
-        suggestion = "负"
+        suggestion = "平/胜"
 
     report = f"""
 【场次】{match['match_id']} {match['home']} vs {match['away']}
 时间：{match['match_time']}
+联赛：{league}
 赔率：胜{win} 平{draw} 负{lose}
 单关：{is_single}
-概率：胜{wp}% 平{dp}% 负{lp}%
-形态：{pattern}
-推荐：{suggestion}
+基础概率：胜{wp}% 平{dp}% 负{lp}%
+盘口形态：{pattern}
+人性盘分析：{human_analysis}
+风险等级：{risk_level}
+推荐方向：{suggestion}
 """
-    return report, suggestion
+    return report, suggestion, risk_level
 
 def main():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     matches = load_db()
     if not matches:
-        send_email(f"【V8.0全自动分析+复盘报告】{now}\n暂无比赛数据")
+        send_email(f"【V8.0全自动分析+复盘报告】{now}\n暂无比赛数据，请上传竞彩截图")
         return
 
     full_report = f"【V8.0全自动分析+复盘报告】{now}\n\n"
     updated = False
 
     for m in matches:
-        report, suggestion = analyze(m)
+        report, suggestion, risk_level = analyze(m)
         full_report += report
 
         # 自动复盘
@@ -131,15 +167,19 @@ def main():
                 m["final_result"] = res
                 m["hit_status"] = "命中" if suggestion == res else "未命中"
                 m["review"] = "自动复盘完成"
+                m["pattern_type"] = report.split("盘口形态：")[1].split("\n")[0]
+                m["human_analysis"] = report.split("人性盘分析：")[1].split("\n")[0]
+                m["draw_prob"] = report.split("平")[1].split("%")[0]
                 updated = True
-                full_report += f"【赛果】{res} | {m['hit_status']}\n"
+                full_report += f"【赛果更新】实际结果：{res} | 本次预测：{m['hit_status']}\n"
 
-        full_report += "-" * 40 + "\n"
+        full_report += "-" * 50 + "\n"
 
     if updated:
         save_db(matches)
 
     send_email(full_report)
+    print("✅ V8.0终极版分析+复盘完成")
 
 if __name__ == "__main__":
     main()
