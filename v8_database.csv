@@ -1,1 +1,2 @@
+match_id,league,home,away,match_time,jc_win,jc_draw,jc_lose,handicap,hcp_win,hcp_draw,hcp_lose,over_under,over,under,is_single,basic_analysis,handicap_analysis,human_analysis,pattern_type,draw_prob,final_result,review,hit_status
 周五001,澳超,墨胜利,纽喷气机,2026-04-17 17:35,1.83,3.90,3.06,-1,3.25,4.00,1.75,2.5,,,否,,,,,,,
