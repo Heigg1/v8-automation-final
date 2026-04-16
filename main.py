@@ -1,138 +1,138 @@
-# -*- coding: utf-8 -*-
-"""
-V8.0 全自动分析系统 · 最终完整版
-流程：豆包识图录入 → GitHub多源验证 → 自动赛果 → 自动复盘 → 邮件推送
-"""
 import csv
 import smtplib
-from datetime import datetime
+import requests
 from email.mime.text import MIMEText
+from email.header import Header
+from datetime import datetime
+import os
 
-# ====================== 你的固定配置 ======================
-EMAIL = "150102030@qq.com"
-AUTH_CODE = "czlspwmcdqqnbjii"
-# ==========================================================
+# ====================== 配置 ======================
+SENDER_EMAIL = "150102030@qq.com"
+SENDER_PASSWORD = "czlspwmcdqqnbjii"
+RECEIVER_EMAIL = "150102030@qq.com"
+DB_FILE = "v8_database.csv"
+# 免费API，无需注册
+API_URL = "https://www.thesportsdb.com/api/v1/json/3/"
+# ===================================================
 
-def send_email(subject, content):
-    """发送邮件到你QQ邮箱"""
+def send_email(content):
+    msg = MIMEText(content, 'plain', 'utf-8')
+    msg['From'] = Header("V8.0自进化破庄神器", 'utf-8')
+    msg['To'] = Header("用户", 'utf-8')
+    msg['Subject'] = Header("【V8.0全自动分析+复盘报告】", 'utf-8')
     try:
-        msg = MIMEText(content, 'plain', 'utf-8')
-        msg['From'] = EMAIL
-        msg['To'] = EMAIL
-        msg['Subject'] = subject
         server = smtplib.SMTP_SSL("smtp.qq.com", 465)
-        server.login(EMAIL, AUTH_CODE)
-        server.sendmail(EMAIL, [EMAIL], msg.as_string())
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
         server.quit()
-        return True
-    except Exception:
-        return False
+        print("✅ 邮件发送成功")
+    except Exception as e:
+        print(f"❌ 发邮件失败: {e}")
 
-def load_match_data():
-    """读取豆包录入的比赛盘口数据"""
+def load_db():
     try:
-        with open("v8_database.csv", "r", encoding="utf-8") as f:
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
             return list(csv.DictReader(f))
     except:
         return []
 
-def get_multi_source_odds(home, away):
-    """
-    多源赔率自动对比
-    真实环境可替换为爬虫API
-    """
-    return {
-        "竞彩":     [2.15, 3.25, 3.10],
-        "威廉希尔": [2.20, 3.30, 3.00],
-        "立博":     [2.18, 3.20, 3.05],
-        "澳彩":     [2.17, 3.25, 3.08]
-    }
+def save_db(rows):
+    headers = [
+        "match_id","league","home","away","match_time",
+        "jc_win","jc_draw","jc_lose",
+        "handicap","hcp_win","hcp_draw","hcp_lose",
+        "over_under","over","under","is_single",
+        "basic_analysis","handicap_analysis","human_analysis",
+        "pattern_type","draw_prob","final_result","review","hit_status"
+    ]
+    with open(DB_FILE, 'w', encoding='utf-8', newline='') as f:
+        w = csv.DictWriter(f, fieldnames=headers)
+        w.writeheader()
+        w.writerows(rows)
 
-def v8_analysis_process(row, odds):
-    """
-    V8.0 完整分析流程
-    1. 基本面
-    2. 盘口形态
-    3. 多源验证
-    4. 人性操盘
-    5. 做局盘 / 自然盘
-    6. 平局概率
-    """
-    jc_w = float(row['jc_win'])
-    jc_d = float(row['jc_draw'])
-    jc_l = float(row['jc_lose'])
+def fetch_live_match(home, away):
+    """从免费API抓取比赛数据"""
+    try:
+        res = requests.get(f"{API_URL}searchteams.php?t={home}").json()
+        if res['teams']:
+            team_id = res['teams'][0]['idTeam']
+            matches = requests.get(f"{API_URL}eventslast.php?id={team_id}").json()
+            return matches['events']
+    except:
+        return None
 
-    # 平局概率计算
-    draw_prob = round(38.0 if 3.1 <= jc_d <= 3.7 else 24.0, 1)
+def analyze(match):
+    win = float(match['jc_win'])
+    draw = float(match['jc_draw'])
+    lose = float(match['jc_lose'])
+    is_single = match['is_single']
 
-    # 盘型判定
-    pattern = "自然盘" if abs(jc_w - jc_l) < 0.3 and jc_d > 3.2 else "做局盘"
+    wp = 1/win
+    dp = 1/draw
+    lp = 1/lose
+    total = wp+dp+lp
+    wp = round(wp/total*100,1)
+    dp = round(dp/total*100,1)
+    lp = round(lp/total*100,1)
 
-    # 庄家操盘逻辑
-    human_analysis = (
-        "热度均衡，无明显诱盘，正路概率高"
-        if pattern == "自然盘"
-        else "机构刻意造热一方，存在诱盘收割意图"
-    )
+    pattern = "自然盘"
+    if win < 1.6: pattern = "热门诱盘"
+    if is_single == "是": pattern += "(单关风控)"
 
-    # 多源一致性校验
-    multi_check = "多源数据一致 → 可信" if abs(odds['竞彩'][0] - odds['威廉希尔'][0]) < 0.15 else "多源存在分歧 → 谨慎"
+    suggestion = "平" if dp >= 30 else ("胜" if win < 1.8 else "负")
 
-    analysis_text = f"""
-【V8.0 完整专业分析】
-1. 多源验证结果：{multi_check}
-   竞彩：{jc_w} | {jc_d} | {jc_l}
-   威廉：{odds['威廉希尔']}
-   立博：{odds['立博']}
-   澳彩：{odds['澳彩']}
+    return (f"""
+【场次】{match['match_id']} {match['home']} vs {match['away']}
+【时间】{match['match_time']}
+【赔率】胜{win} 平{draw} 负{lose}
+【单关】{is_single}
+【概率】胜{wp}% 平{dp}% 负{lp}%
+【形态】{pattern}
+【结论】{suggestion}
+""", suggestion, dp, pattern)
 
-2. 盘口形态判定：{pattern}
-3. 平局概率：{draw_prob}%
-4. 单关标记：{row['is_single']}
-5. 庄家人性操盘逻辑：{human_analysis}
-"""
-    return analysis_text, pattern, draw_prob
-
-def get_real_match_result():
-    """自动获取赛果（正式版替换为真实爬虫）"""
-    import random
-    return random.choice(["主胜", "平局", "客胜"])
-
-def auto_review_and_send():
-    """自动复盘 + 发邮件"""
-    matches = load_match_data()
+def main():
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    report = f"【V8.0 全自动分析+复盘报告】{now}\n"
+    rows = load_db()
+    if not rows:
+        send_email(f"【V8.0 全自动分析+复盘报告】{now}\n暂无比赛数据，请通过指令添加比赛。")
+        return
 
-    if not matches:
-        report += "\n暂无比赛数据，请上传竞彩截图，由豆包录入。"
-    else:
-        for idx, row in enumerate(matches, 1):
-            report += f"\n===== 场次 {idx} =====\n"
-            report += f"赛事：{row['league']}\n"
-            report += f"{row['home']} vs {row['away']}\n"
+    full_report = f"【V8.0 全自动分析+复盘报告】{now}\n\n"
+    updated = False
 
-            # 多源赔率
-            odds = get_multi_source_odds(row['home'], row['away'])
-            # V8.0分析
-            analysis, pattern, draw_prob = v8_analysis_process(row, odds)
-            report += analysis
+    for match in rows:
+        report, sug, dp, pattern = analyze(match)
+        match['basic_analysis'] = report
+        match['draw_prob'] = str(dp)
+        match['pattern_type'] = pattern
+        full_report += report + "\n" + "-"*30 + "\n"
 
-            # 自动赛果
-            result = get_real_match_result()
-            report += f"\n6. 最终赛果：{result}"
+        # 自动抓取赛果并复盘
+        if not match.get('final_result'):
+            events = fetch_live_match(match['home'], match['away'])
+            if events:
+                for event in events:
+                    if event['strHomeTeam'] == match['home'] and event['strAwayTeam'] == match['away']:
+                        home_goals = event['intHomeScore']
+                        away_goals = event['intAwayScore']
+                        if home_goals is not None and away_goals is not None:
+                            if home_goals > away_goals:
+                                result = "胜"
+                            elif home_goals < away_goals:
+                                result = "负"
+                            else:
+                                result = "平"
+                            match['final_result'] = result
+                            match['hit_status'] = "命中" if sug == result else "未命中"
+                            match['review'] = "自动复盘完成"
+                            updated = True
+                        break
 
-            # 复盘结果
-            hit = "命中" if (
-                (result == "主胜" and float(row['jc_win']) < 2.5) or
-                (result == "平局" and draw_prob > 33) or
-                (result == "客胜" and float(row['jc_lose']) < 2.5)
-            ) else "未命中"
-
-            report += f"\n7. 复盘结论：{hit}"
-
-    send_email("V8.0 全自动分析报告", report)
-    return "任务执行完成，邮件已发送"
+    if updated:
+        save_db(rows)
+    send_email(full_report)
+    print("✅ 全自动分析+复盘完成")
 
 if __name__ == "__main__":
-    auto_review_and_send()
+    main()
