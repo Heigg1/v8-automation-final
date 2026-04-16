@@ -10,14 +10,22 @@ SENDER_EMAIL = os.getenv("SENDER_EMAIL")
 SENDER_PWD = os.getenv("SENDER_PASSWORD")
 RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
 
-# ====================== 联赛配置 ======================
+# ====================== 【已更新】联赛配置（含你要的所有赛事） ======================
 LEAGUE_CODES = [
-    "soccer_epl",
-    "soccer_bundesliga",
-    "soccer_serie_a",
-    "soccer_laliga",
-    "soccer_ligue_1",
-    "soccer_china_super"
+    # 五大联赛
+    "soccer_epl",           # 英超
+    "soccer_bundesliga",    # 德甲
+    "soccer_serie_a",       # 意甲
+    "soccer_laliga",        # 西甲
+    "soccer_ligue_1",       # 法甲
+    "soccer_china_super",   # 中超
+    # 新增赛事
+    "soccer_efl_championship",  # 英冠
+    "soccer_eredivisie",        # 荷甲
+    "soccer_japan_j1_league",   # 日职联
+    "soccer_korea_k_league_1",  # 韩K联
+    "soccer_europa_league",     # 欧罗巴联赛
+    "soccer_afc_champions_league" # 亚冠精英赛
 ]
 
 # ====================== 进化数据库 ======================
@@ -112,7 +120,7 @@ def send_schedule_1110():
     if not matches:
         send_email("V8.0 今日赛程", "<h3>今日无赛事</h3>")
         return
-    html = "<h2>📅 今日全部赛程</h2>"
+    html = "<h2>📅 今日全部赛程（含所有新增联赛）</h2>"
     for m in matches:
         html += f"<p>{m['is_single']} {m['home']} vs {m['away']}　开球：{m['kickoff']}</p>"
     send_email("V8.0 今日赛程", html)
