@@ -1,20 +1,18 @@
-name: V8.0全自动任务
+name: V8-Auto-Task
 on:
-  workflow_dispatch:   # 允许手动测试
+  workflow_dispatch:
   schedule:
-    - cron: "0 10 * * *"  # 上午10点
-    - cron: "0 14 * * *"  # 下午14点
-    - cron: "0 17 * * *"  # 下午17点
-    - cron: "0 20 * * *"  # 晚上20点
+    - cron: "0 10 * * *"
+    - cron: "0 14 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 20 * * *"
 
 jobs:
-  run-analysis:
+  run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python 3.10
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: 运行V8.0自动分析
-        run: python main.py
+      - run: python main.py
