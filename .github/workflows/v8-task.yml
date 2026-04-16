@@ -1,18 +1,32 @@
-name: V8-Auto-Task
+name: Football Analyzer
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 11 * * *'
+    - cron: '0 3 * * *'    # 北京时间 11:00
+    - cron: '0 5 * * *'    # 北京时间 13:00
+    - cron: '0 7 * * *'    # 北京时间 15:00
+    - cron: '0 9 * * *'    # 北京时间 17:00
+    - cron: '30 9 * * *'   # 北京时间 17:30（赛前分析）
 
 jobs:
-  run:
+  analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 设置Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
-      - name: Install dependencies
-        run: pip install requests
-      - name: Run script
-        run: python main.py
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: pip install requests pandas
+
+      - name: 运行脚本
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+        run: python football_analyzer.py
