@@ -1,0 +1,81 @@
+name: 单场比赛预测
+on:
+  workflow_dispatch:
+    inputs:
+      league:
+        description: '联赛'
+        required: true
+      home:
+        description: '主队'
+        required: true
+      away:
+        description: '客队'
+        required: true
+      h_odd:
+        description: '主胜赔率'
+        required: true
+      d_odd:
+        description: '平局赔率'
+        required: true
+      a_odd:
+        description: '客胜赔率'
+        required: true
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests
+      - run: |
+          cat > predict.py << 'EOF'
+import os, smtplib
+from email.mime.text import MIMEText
+
+SENDER = "150102030@qq.com"
+RECEIVER = "150102030@qq.com"
+AUTH = "czlspwmcdqqnbjii"
+SMTP = "smtp.qq.com"
+PORT = 465
+
+def calc(h, d, a):
+    h = 1/float(h)
+    d = 1/float(d)
+    a = 1/float(a)
+    t = h+d+a
+    return {"主胜":round(h/t*100,2),"平局":round(d/t*100,2),"客胜":round(a/t*100,2)}
+
+def send(sub, html):
+    msg = MIMEText(html, 'html', 'utf-8')
+    msg['From'] = SENDER
+    msg['To'] = RECEIVER
+    msg['Subject'] = sub
+    with smtplib.SMTP_SSL(SMTP, PORT) as s:
+        s.login(SENDER, AUTH)
+        s.sendmail(SENDER, [RECEIVER], msg.as_string())
+
+if __name__ == "__main__":
+    lg = os.environ['INPUT_LEAGUE']
+    h = os.environ['INPUT_HOME']
+    a = os.environ['INPUT_AWAY']
+    ho = os.environ['INPUT_H_ODD']
+    do = os.environ['INPUT_D_ODD']
+    ao = os.environ['INPUT_A_ODD']
+    prob = calc(ho, do, ao)
+    res = max(prob, key=prob.get)
+    html = f"""
+    <h3>⚽ 单场预测：{h} vs {a}</h3>
+    <p>联赛：{lg}</p>
+    <p>赔率：主{ho} 平{do} 客{ao}</p>
+    <hr>
+    <p>主胜：{prob['主胜']}%</p>
+    <p>平局：{prob['平局']}%</p>
+    <p>客胜：{prob['客胜']}%</p>
+    <h2>结论：{res}</h2>
+    """
+    send(f"{h} vs {a} 预测", html)
+EOF
+          python predict.py
