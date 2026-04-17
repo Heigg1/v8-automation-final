@@ -228,8 +228,7 @@ def main():
 """
     for p in preds:
         t = "【单关】" if p["is_single"] else "普通"
-        pred_text = max(p['pred'], key=p['pred'].get)
-        html2 += f"<tr><td>{p['league']}</td><td>{p['home']} vs {p['away']}</td><td>{pred_text}</td><td>{p['draw_rate']}%</td><td>{t}</td></tr>"
+        html2 += f"<tr><td>{p['league']}</td><td>{p['home']} vs {p['away']}</td><td>{p['pred']}</td><td>{p['draw_rate']}%</td><td>{t}</td></tr>"
     html2 += "</table></div>"
     send("今日赛事预测", html2)
 
@@ -237,7 +236,7 @@ def main():
     correct, draw_ok, total, hit, details = check_results(matches)
     html3 = f"""
 <div style="padding:15px; font-family:Arial; background:#f5f5f5; border-radius:8px;">
-<h2 style="border-bottom:2px solid #0F9D58; padding-bottom:8px;">📊 赛果复盘</h3>
+<h2 style="border-bottom:2px solid #0F9D58; padding-bottom:8px;">📊 赛果复盘</h2>
 <p>完赛场次：{total}　正确：{correct}　命中率：{hit}%</p>
 <p>平局命中：{draw_ok}</p>
 <hr>
