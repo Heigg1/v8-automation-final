@@ -12,10 +12,13 @@ RECEIVER_EMAIL = "150102030@qq.com"
 API_KEY = "2d68a0437756441b8b8a101b7263e17f"
 HEADERS = {"X-Auth-Token": API_KEY}
 
-# 竞彩单关主流联赛
-SINGLE_LEAGUES = {"PL", "BL1", "SA", "FL1", "DED", "PD", "PPL", "BSA", "CLB", "MEX", "ARG", "TUR", "URS"}
+# 竞彩单关主流联赛（含德乙、法乙、荷乙、英冠、美职）
+SINGLE_LEAGUES = {
+    "PL", "BL1", "SA", "FL1", "DED", "PD", "PPL", "BSA", "CLB", "MEX", "ARG", "TUR", "URS",
+    "AUS", "J1", "K1", "BL2", "FL2", "E2", "ELC", "MLS"
+}
 
-# ====================== 竞彩网标准联赛中文映射 ======================
+# ====================== 竞彩网标准联赛中文映射（含新增5大联赛） ======================
 LEAGUE_CN = {
     "PL": "英超",
     "BL1": "德甲",
@@ -30,6 +33,14 @@ LEAGUE_CN = {
     "ARG": "阿超",
     "URS": "乌超",
     "TUR": "土超",
+    "AUS": "澳超",
+    "J1": "日职联",
+    "K1": "韩K联",
+    "BL2": "德乙",
+    "FL2": "法乙",
+    "E2": "荷乙",
+    "ELC": "英冠",
+    "MLS": "美职联",
     "CL": "欧冠",
     "EL": "欧联",
     "EC": "欧协联"
@@ -37,6 +48,7 @@ LEAGUE_CN = {
 
 # ====================== 球队中文名称 ======================
 TEAM_CN = {
+    # 原有队伍
     "US Sassuolo Calcio": "萨索洛",
     "Como 1907": "科莫",
     "1. FC Köln": "科隆",
@@ -62,7 +74,103 @@ TEAM_CN = {
     "Atlético Madrid": "马竞",
     "Juventus FC": "尤文",
     "AC Milan": "AC米兰",
-    "SSC Napoli": "那不勒斯"
+    "SSC Napoli": "那不勒斯",
+
+    # 澳超
+    "Adelaide United FC": "阿德莱德联",
+    "Brisbane Roar FC": "布里斯班狮吼",
+    "Central Coast Mariners FC": "中央海岸水手",
+    "Macarthur FC": "麦克阿瑟FC",
+    "Melbourne City FC": "墨尔本城",
+    "Melbourne Victory FC": "墨尔本胜利",
+    "Newcastle Jets FC": "纽卡斯尔喷气机",
+    "Perth Glory FC": "珀斯光荣",
+    "Sydney FC": "悉尼FC",
+    "Western Sydney Wanderers FC": "西悉尼流浪者",
+
+    # 日职联
+    "Kawasaki Frontale": "川崎前锋",
+    "Yokohama F. Marinos": "横滨水手",
+    "Urawa Red Diamonds": "浦和红钻",
+    "Sanfrecce Hiroshima": "广岛三箭",
+    "Kashima Antlers": "鹿岛鹿角",
+    "Nagoya Grampus": "名古屋鲸鱼",
+    "FC Tokyo": "东京FC",
+    "Vissel Kobe": "神户胜利船",
+    "Cerezo Osaka": "大阪樱花",
+    "Gamba Osaka": "大阪钢巴",
+
+    # 韩K联
+    "Jeonbuk Hyundai Motors": "全北现代",
+    "Ulsan Hyundai": "蔚山现代",
+    "FC Seoul": "首尔FC",
+    "Suwon Samsung Bluewings": "水原三星",
+    "Jeonnam Dragons": "全南三星",
+    "Gwangju FC": "光州FC",
+    "Pohang Steelers": "浦项制铁",
+    "Daegu FC": "大邱FC",
+    "Incheon United": "仁川联",
+    "Seongnam FC": "城南FC",
+
+    # 德乙
+    "Hamburger SV": "汉堡",
+    "1. FC Heidenheim 1846": "海登海姆",
+    "Holstein Kiel": "荷尔斯泰因基尔",
+    "SC Paderborn 07": "帕德博恩",
+    "Fortuna Düsseldorf": "杜塞尔多夫",
+    "Karlsruher SC": "卡尔斯鲁厄",
+    "SV Darmstadt 98": "达姆施塔特",
+    "SpVgg Greuther Fürth": "菲尔特",
+    "VfL Osnabrück": "奥斯纳布吕克",
+    "Eintracht Braunschweig": "布伦瑞克",
+
+    # 法乙
+    "SM Caen": "卡昂",
+    "Grenoble Foot 38": "格勒诺布尔",
+    "Le Havre AC": "勒阿弗尔",
+    "AJ Auxerre": "欧塞尔",
+    "FC Metz": "梅斯",
+    "Stade Lavallois": "拉瓦勒",
+    "US Quevilly-Rouen Métropole": "奎维利鲁昂",
+    "FC Annecy": "安纳西",
+    "Nîmes Olympique": "尼姆",
+    "Pau FC": "波城",
+
+    # 荷乙
+    "Jong Ajax": "阿贾克斯青年队",
+    "Jong PSV": "埃因霍温青年队",
+    "Jong Feyenoord": "费耶诺德青年队",
+    "SC Cambuur Leeuwarden": "坎布尔",
+    "De Graafschap": "格拉夫夏普",
+    "FC Emmen": "埃门",
+    "FC Den Bosch": "登博思",
+    "Helmond Sport": "赫尔蒙德",
+    "MVV Maastricht": "马斯特里赫特",
+    "Almere City FC": "阿尔梅勒城",
+
+    # 英冠
+    "Leeds United": "利兹联",
+    "Leicester City": "莱斯特城",
+    "Southampton FC": "南安普顿",
+    "Ipswich Town": "伊普斯维奇",
+    "West Bromwich Albion": "西布朗",
+    "Middlesbrough FC": "米德尔斯堡",
+    "Sunderland AFC": "桑德兰",
+    "Norwich City": "诺维奇",
+    "Millwall FC": "米尔沃尔",
+    "Birmingham City": "伯明翰",
+
+    # 美职联
+    "Inter Miami CF": "迈阿密国际",
+    "LA Galaxy": "洛杉矶银河",
+    "Los Angeles FC": "洛杉矶FC",
+    "New York City FC": "纽约城",
+    "Atlanta United FC": "亚特兰大联",
+    "Seattle Sounders FC": "西雅图海湾人",
+    "Portland Timbers": "波特兰伐木者",
+    "FC Dallas": "达拉斯FC",
+    "Orlando City SC": "奥兰多城",
+    "New England Revolution": "新英格兰革命"
 }
 
 def team_cn(name):
