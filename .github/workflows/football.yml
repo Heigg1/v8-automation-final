@@ -1,22 +1,20 @@
-name: V8.0全自动足球分析系统
+name: Football Auto Run
 on:
   schedule:
-    - cron: '10 11 * * *'
-    - cron: '*/30 * * * *'
+    - cron: '10 3 * * *'    # 北京时间 11:10 执行
+    - cron: '30 11 * * *'   # 北京时间 19:30 执行
+    - cron: '00 15 * * *'   # 北京时间 23:00 复盘
+
 jobs:
   run:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
       - name: Install dependencies
         run: pip install requests
-      - name: Run V8.0
-        run: python main.py
-        env:
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+      - name: Run script
+        run: python football_analyzer.py
