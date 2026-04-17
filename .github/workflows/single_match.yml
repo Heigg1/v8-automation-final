@@ -1,0 +1,112 @@
+name: 单场比赛预测
+
+on:
+  workflow_dispatch:
+    inputs:
+      league:
+        description: '联赛名称（例如：英超）'
+        required: true
+        default: '英超'
+      home_team:
+        description: '主队'
+        required: true
+      away_team:
+        description: '客队'
+        required: true
+      home_odd:
+        description: '主胜赔率'
+        required: true
+        default: '2.30'
+      draw_odd:
+        description: '平局赔率'
+        required: true
+        default: '3.40'
+      away_odd:
+        description: '客胜赔率'
+        required: true
+        default: '2.90'
+
+jobs:
+  predict:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run prediction
+        env:
+          LEAGUE: ${{ github.event.inputs.league }}
+          HOME: ${{ github.event.inputs.home_team }}
+          AWAY: ${{ github.event.inputs.away_team }}
+          H_ODD: ${{ github.event.inputs.home_odd }}
+          D_ODD: ${{ github.event.inputs.draw_odd }}
+          A_ODD: ${{ github.event.inputs.away_odd }}
+        run: |
+          cat > temp_predict.py << 'EOF'
+import os
+import smtplib
+from email.mime.text import MIMEText
+
+SENDER = "150102030@qq.com"
+RECEIVER = "150102030@qq.com"
+AUTH_CODE = "czlspwmcdqqnbjii"
+SMTP_HOST = "smtp.qq.com"
+SMTP_PORT = 465
+
+def calc_prob(h, d, a):
+    try:
+        h = 1/float(h)
+        d = 1/float(d)
+        a = 1/float(a)
+        total = h + d + a
+        return {
+            "主胜": round(h/total*100,2),
+            "平局": round(d/total*100,2),
+            "客胜": round(a/total*100,2)
+        }
+    except:
+        return {"主胜":33,"平局":34,"客胜":33}
+
+def send_mail(subject, html):
+    msg = MIMEText(html, 'html', 'utf-8')
+    msg['From'] = SENDER
+    msg['To'] = RECEIVER
+    msg['Subject'] = subject
+    with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
+        s.login(SENDER, AUTH_CODE)
+        s.sendmail(SENDER, [RECEIVER], msg.as_string())
+
+if __name__ == "__main__":
+    lg = os.getenv("LEAGUE")
+    h = os.getenv("HOME")
+    a = os.getenv("AWAY")
+    ho = os.getenv("H_ODD")
+    do = os.getenv("D_ODD")
+    ao = os.getenv("A_ODD")
+
+    prob = calc_prob(ho, do, ao)
+    result = max(prob, key=prob.get)
+
+    html = f"""
+<h3>⚽ 单场预测（GitHub云端运行）</h3>
+<p>联赛：{lg}</p>
+<p>{h} vs {a}</p>
+<p>赔率：主{ho} 平{do} 客{ao}</p>
+<hr>
+<p>主胜：{prob['主胜']}%</p>
+<p>平局：{prob['平局']}%</p>
+<p>客胜：{prob['客胜']}%</p>
+<hr>
+<h2>✅ 最终结论：{result}</h2>
+"""
+    send_mail(f"单场预测：{h}vs{a}", html)
+EOF
+          python temp_predict.py
