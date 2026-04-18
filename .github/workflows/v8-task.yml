@@ -2,10 +2,10 @@ name: Football Real Data Auto
 
 on:
   schedule:
-    - cron: '10 3 * * *'    # 北京时间 11:10 抓取赛程+初盘
-    - cron: '*/10 * * * *'  # 每10分钟检查并抓取临盘
-    - cron: '0 15 * * *'    # 北京时间 23:00 抓取赛果
-    - cron: '10 15 * * *'   # 北京时间 23:10 生成复盘
+    - cron: '10 3 * * *'
+    - cron: '*/10 * * * *'
+    - cron: '0 15 * * *'
+    - cron: '10 15 * * *'
   workflow_dispatch: {}
 
 jobs:
