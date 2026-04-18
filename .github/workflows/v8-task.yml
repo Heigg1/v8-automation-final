@@ -9,24 +9,48 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  run:
+  run-football:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-      - name: Install dependencies
+
+      - name: 安装依赖
         run: pip install requests
-      - name: 抓取今日赛程
-        if: github.event.schedule == '10 3 * * *'
+
+      - name: 抓取今日赛程与初盘
         run: python football_analyzer.py schedule
-      - name: 抓取临盘赔率
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
+
+      - name: 抓取赛前45分钟临盘数据
         run: python football_analyzer.py live
-      - name: 抓取赛果
-        if: github.event.schedule == '0 15 * * *'
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
+
+      - name: 抓取已结束比赛的真实赛果
         run: python football_analyzer.py result
-      - name: 生成复盘报告
-        if: github.event.schedule == '10 15 * * *'
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
+
+      - name: 生成复盘报告并发送邮件
         run: python football_analyzer.py review
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+          EMAIL_AUTH_CODE: ${{ secrets.EMAIL_AUTH_CODE }}
